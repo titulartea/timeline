@@ -1,0 +1,36 @@
+{
+  "entities": {
+    "rooms": {
+      "title": "Room",
+      "description": "Real-time timeline room containing settings and events",
+      "type": "object",
+      "properties": {
+        "settings": {
+          "type": "object",
+          "properties": {
+            "minYear": { "type": "number" },
+            "maxYear": { "type": "number" },
+            "zoomLevel": { "type": "number" }
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "description": { "type": "string" },
+              "year": { "type": "number" },
+              "endYear": { "type": "number" },
+              "color": { "type": "string" },
+              "category": { "type": "string" },
+              "importance": { "type": "string" },
+              "tags": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

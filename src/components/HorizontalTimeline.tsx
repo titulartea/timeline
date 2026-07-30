@@ -47,6 +47,13 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
   const [dropTargetEventId, setDropTargetEventId] = useState<string | null>(null);
   const [dropTargetPosition, setDropTargetPosition] = useState<'before' | 'after'>('before');
   const lastReorderSignatureRef = useRef<string | null>(null);
+  const activeTouchPointsRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchGestureRef = useRef<{
+    startDistance: number;
+    startZoom: number;
+    centerX: number;
+  } | null>(null);
+  const isPinchingRef = useRef<boolean>(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const axisRef = useRef<HTMLDivElement>(null);
@@ -234,6 +241,37 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
 
   const getBaselineThreshold = (pointerType: string) => (pointerType === 'touch' ? 56 : 35);
 
+  const applyZoomAtClientX = (clientX: number, targetZoom: number) => {
+    const container = containerRef.current;
+    const axis = axisRef.current;
+    if (!container || !axis) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const cursorXInContainer = clientX - containerRect.left;
+    const currentTotalWidth = axis.getBoundingClientRect().width;
+    const ratio = (container.scrollLeft + cursorXInContainer) / currentTotalWidth;
+
+    setZoomLevel((prev) => {
+      const nextZoom = Math.max(0.08, Math.min(60, +targetZoom.toFixed(2)));
+      if (nextZoom === prev) return prev;
+
+      requestAnimationFrame(() => {
+        if (axisRef.current && containerRef.current) {
+          const newTotalWidth = axisRef.current.getBoundingClientRect().width;
+          const targetScrollLeft = ratio * newTotalWidth - cursorXInContainer;
+          containerRef.current.scrollLeft = Math.max(0, targetScrollLeft);
+        }
+      });
+
+      return nextZoom;
+    });
+  };
+
+  const clearPinchState = () => {
+    isPinchingRef.current = false;
+    pinchGestureRef.current = null;
+  };
+
   const finalizeInteraction = () => {
     if (dragMode === 'create' && dragStartYear !== null && currentHoverYear !== null) {
       const start = Math.min(dragStartYear, currentHoverYear);
@@ -258,7 +296,36 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
   // Pointer Handlers for Click & Drag Creation VS Panning Canvas
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!axisRef.current || !containerRef.current) return;
-    if (activePointerIdRef.current !== null && activePointerIdRef.current !== e.pointerId) return;
+
+    if (e.pointerType !== 'touch' && activePointerIdRef.current !== null && activePointerIdRef.current !== e.pointerId) return;
+
+    if (e.pointerType === 'touch') {
+      activeTouchPointsRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      e.preventDefault();
+      e.stopPropagation();
+      e.currentTarget.setPointerCapture(e.pointerId);
+
+      if (activeTouchPointsRef.current.size >= 2) {
+        const points = Array.from(activeTouchPointsRef.current.values()).slice(0, 2);
+        const dx = points[0].x - points[1].x;
+        const dy = points[0].y - points[1].y;
+        const distance = Math.max(1, Math.hypot(dx, dy));
+        pinchGestureRef.current = {
+          startDistance: distance,
+          startZoom: zoomLevel,
+          centerX: (points[0].x + points[1].x) / 2,
+        };
+        isPinchingRef.current = true;
+        setDragMode('none');
+        setDragStartYear(null);
+        setCurrentHoverX(null);
+        setCurrentHoverYear(null);
+        setIsNearBaseline(false);
+        setDragPlacementSide('above');
+        activePointerIdRef.current = null;
+        return;
+      }
+    }
 
     if ((e.target as HTMLElement | null)?.closest('[data-timeline-event="true"]')) {
       return;
@@ -295,8 +362,27 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
     if (!axisRef.current) return;
+
+    if (e.pointerType === 'touch') {
+      activeTouchPointsRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (isPinchingRef.current && pinchGestureRef.current && activeTouchPointsRef.current.size >= 2) {
+        e.preventDefault();
+
+        const points = Array.from(activeTouchPointsRef.current.values()).slice(0, 2);
+        const dx = points[0].x - points[1].x;
+        const dy = points[0].y - points[1].y;
+        const distance = Math.max(1, Math.hypot(dx, dy));
+        const centerX = (points[0].x + points[1].x) / 2;
+        const scale = distance / pinchGestureRef.current.startDistance;
+
+        applyZoomAtClientX(centerX, pinchGestureRef.current.startZoom * scale);
+        return;
+      }
+    }
+
+    if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
 
     e.preventDefault();
 
@@ -317,6 +403,21 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'touch') {
+      activeTouchPointsRef.current.delete(e.pointerId);
+
+      if (isPinchingRef.current) {
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        }
+
+        if (activeTouchPointsRef.current.size < 2) {
+          clearPinchState();
+        }
+        return;
+      }
+    }
+
     if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
 
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
@@ -328,6 +429,21 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
   };
 
   const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'touch') {
+      activeTouchPointsRef.current.delete(e.pointerId);
+
+      if (isPinchingRef.current) {
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        }
+
+        if (activeTouchPointsRef.current.size < 2) {
+          clearPinchState();
+        }
+        return;
+      }
+    }
+
     if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
 
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
@@ -339,6 +455,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
   };
 
   const handlePointerLeave = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isPinchingRef.current) return;
     if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
 
     if (dragMode === 'create') {

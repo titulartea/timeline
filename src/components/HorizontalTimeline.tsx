@@ -23,8 +23,8 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
   onDeleteEvent,
   onAddEventWithRange,
 }) => {
-  // Zoom level controls canvas width and tick detail (0.5 to 10 scale)
-  const [zoomLevel, setZoomLevel] = useState(3);
+  // Zoom level controls canvas width and tick detail (0.08 to 60 scale)
+  const [zoomLevel, setZoomLevel] = useState(0.2);
   const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(null);
 
   // Drag interaction modes: 'none' | 'create' (사건/범위 생성) | 'pan' (타임라인 이동)
@@ -51,8 +51,8 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
     }
   }, []);
 
-  // Dynamic wide year bounds (-5000 BC ~ +3000 AD base)
-  const defaultMin = -5000;
+  // Dynamic wide year bounds (-4200 BC ~ +3000 AD base)
+  const defaultMin = -4200;
   const defaultMax = 3000;
 
   const eventYears = events.flatMap((e) => [
@@ -64,7 +64,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
   const maxYear = eventYears.length > 0 ? Math.max(defaultMax, Math.ceil(Math.max(...eventYears) / 500) * 500 + 500) : defaultMax;
 
   const yearRange = Math.max(100, maxYear - minYear);
-  const totalWidth = Math.max(2500, Math.round(yearRange * zoomLevel * 0.8));
+  const totalWidth = Math.max(900, Math.round(yearRange * zoomLevel * 0.8));
   const pixelsPerYear = totalWidth / yearRange;
 
   // Focal Wheel Zoom handler: Zooms in/out keeping the cursor position fixed on screen
@@ -83,7 +83,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
 
         const zoomDelta = e.deltaY < 0 ? 0.5 : -0.5;
         setZoomLevel((prev) => {
-          const nextZoom = Math.max(0.5, Math.min(10, +(prev + zoomDelta).toFixed(1)));
+          const nextZoom = Math.max(0.08, Math.min(60, +(prev + zoomDelta).toFixed(2)));
           if (nextZoom === prev) return prev;
 
           // Focal scroll alignment after re-render
@@ -335,7 +335,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
   }, [dragMode, dragStartYear, currentHoverYear, minYear, yearRange]);
 
   // Dynamic canvas height to fit all lanes cleanly across screen
-  const canvasMinHeight = Math.max(450, 240 + (maxLane + 1) * 40);
+  const canvasMinHeight = Math.max(900, 260 + (maxLane + 1) * 72);
 
   return (
     <div
@@ -442,7 +442,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
           const startPct = Math.max(0, Math.min(100, ((event.year - minYear) / yearRange) * 100));
 
           // Stacked lane height offset ABOVE central baseline line (50%)
-          const bottomOffsetPx = 12 + event.lane * 36;
+          const bottomOffsetPx = 18 + event.lane * 48;
 
           if (hasEndRange) {
             // 1. Time Range Bar (범위 이벤트 - 직사각형 rounded-none, 고정색 rgb(74, 111, 165))

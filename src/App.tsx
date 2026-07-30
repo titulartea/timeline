@@ -14,6 +14,7 @@ export default function App() {
     roomState,
     addEvent,
     updateEvent,
+    reorderEvents,
     deleteEvent,
   } = useRealtimeRoom(roomId);
 
@@ -25,7 +26,12 @@ export default function App() {
 
   // Sorted events list for display
   const sortedEvents = useMemo(() => {
-    return [...roomState.events].sort((a, b) => a.year - b.year);
+    return [...roomState.events].sort((a, b) => {
+      const orderA = a.displayOrder ?? Number.MAX_SAFE_INTEGER;
+      const orderB = b.displayOrder ?? Number.MAX_SAFE_INTEGER;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.year - b.year;
+    });
   }, [roomState.events]);
 
   // Handlers
@@ -63,6 +69,7 @@ export default function App() {
           onEditEvent={handleOpenEditModal}
           onDeleteEvent={deleteEvent}
           onAddEventWithRange={handleAddEventWithRange}
+          onReorderEvent={reorderEvents}
         />
       </main>
 

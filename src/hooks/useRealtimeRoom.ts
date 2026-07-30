@@ -86,7 +86,49 @@ export function useRealtimeRoom(roomId: string = 'default-timeline') {
   const updateEvent = useCallback(
     (event: TimelineEvent) => {
       setRoomState((prev) => {
-        const updatedEvents = prev.events.map((e) => (e.id === event.id ? event : e));
+        const updatedEvents = prev.events.map((e) =>
+          e.id === event.id ? { ...event, displayOrder: event.displayOrder ?? e.displayOrder } : e
+        );
+        syncToFirestore(prev.settings, updatedEvents);
+        return { ...prev, events: updatedEvents };
+      });
+    },
+    [syncToFirestore]
+  );
+
+  const reorderEvents = useCallback(
+    (eventId: string, targetEventId: string, position: 'before' | 'after' = 'before') => {
+      if (eventId === targetEventId) return;
+
+      setRoomState((prev) => {
+        const orderedEvents = [...prev.events].sort((a, b) => {
+          const orderA = a.displayOrder ?? Number.MAX_SAFE_INTEGER;
+          const orderB = b.displayOrder ?? Number.MAX_SAFE_INTEGER;
+          if (orderA !== orderB) return orderA - orderB;
+          return a.year - b.year;
+        });
+
+        const fromIndex = orderedEvents.findIndex((event) => event.id === eventId);
+        const targetIndex = orderedEvents.findIndex((event) => event.id === targetEventId);
+
+        if (fromIndex < 0 || targetIndex < 0) return prev;
+
+        const nextEvents = [...orderedEvents];
+        const [movedEvent] = nextEvents.splice(fromIndex, 1);
+        let insertIndex = nextEvents.findIndex((event) => event.id === targetEventId);
+
+        if (insertIndex < 0) return prev;
+        if (position === 'after') {
+          insertIndex += 1;
+        }
+
+        nextEvents.splice(insertIndex, 0, movedEvent);
+
+        const updatedEvents = nextEvents.map((event, index) => ({
+          ...event,
+          displayOrder: index,
+        }));
+
         syncToFirestore(prev.settings, updatedEvents);
         return { ...prev, events: updatedEvents };
       });
@@ -110,6 +152,7 @@ export function useRealtimeRoom(roomId: string = 'default-timeline') {
     isConnected,
     addEvent,
     updateEvent,
+    reorderEvents,
     deleteEvent,
   };
 }

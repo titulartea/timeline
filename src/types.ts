@@ -7,6 +7,7 @@ export interface TimelineEvent {
   color?: string;
   updatedAt?: number;
   laneSide?: 'above' | 'below';
+  displayOrder?: number;
 }
 
 export interface TimelineSettings {

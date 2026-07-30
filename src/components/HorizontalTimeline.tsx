@@ -9,6 +9,7 @@ interface HorizontalTimelineProps {
   onEditEvent: (event: TimelineEvent) => void;
   onDeleteEvent: (eventId: string) => void;
   onAddEventWithRange: (startYear: number, endYear?: number, laneSide?: 'above' | 'below') => void;
+  onReorderEvent: (eventId: string, targetEventId: string, position?: 'before' | 'after') => void;
 }
 
 interface EventWithLane extends TimelineEvent {
@@ -23,6 +24,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
   onEditEvent,
   onDeleteEvent,
   onAddEventWithRange,
+  onReorderEvent,
 }) => {
   // Zoom level controls canvas width and tick detail (0.08 to 60 scale)
   const [zoomLevel, setZoomLevel] = useState(0.2);
@@ -41,6 +43,10 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
   const [isNearBaseline, setIsNearBaseline] = useState<boolean>(false);
   const [viewportScrollLeft, setViewportScrollLeft] = useState<number>(0);
   const [dragPlacementSide, setDragPlacementSide] = useState<'above' | 'below'>('above');
+  const [draggedEventId, setDraggedEventId] = useState<string | null>(null);
+  const [dropTargetEventId, setDropTargetEventId] = useState<string | null>(null);
+  const [dropTargetPosition, setDropTargetPosition] = useState<'before' | 'after'>('before');
+  const lastReorderSignatureRef = useRef<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const axisRef = useRef<HTMLDivElement>(null);
@@ -155,7 +161,12 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
 
   // Interval Stacking Layout Algorithm for overlapping range bars & pins
   const eventsWithLanes = useMemo(() => {
-    const sorted = [...events].sort((a, b) => a.year - b.year);
+    const sorted = [...events].sort((a, b) => {
+      const orderA = a.displayOrder ?? Number.MAX_SAFE_INTEGER;
+      const orderB = b.displayOrder ?? Number.MAX_SAFE_INTEGER;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.year - b.year;
+    });
     const laneEndsAbove: number[] = [];
     const laneEndsBelow: number[] = [];
     const pinYearWidth = Math.max(15, Math.ceil(120 / pixelsPerYear));
@@ -372,6 +383,49 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
 
   const getEventColor = (event: TimelineEvent) => event.color || FIXED_EVENT_COLOR;
 
+  const clearDragState = () => {
+    setDraggedEventId(null);
+    setDropTargetEventId(null);
+    setDropTargetPosition('before');
+    lastReorderSignatureRef.current = null;
+  };
+
+  const handleEventDragStart = (e: React.DragEvent<HTMLElement>, eventId: string) => {
+    e.stopPropagation();
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', eventId);
+    setDraggedEventId(eventId);
+  };
+
+  const handleEventDragOver = (e: React.DragEvent<HTMLElement>, eventId: string) => {
+    if (!draggedEventId || draggedEventId === eventId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const position = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+    const reorderSignature = `${draggedEventId}:${eventId}:${position}`;
+
+    if (lastReorderSignatureRef.current !== reorderSignature) {
+      lastReorderSignatureRef.current = reorderSignature;
+      onReorderEvent(draggedEventId, eventId, position);
+    }
+
+    setDropTargetEventId(eventId);
+    setDropTargetPosition(position);
+  };
+
+  const handleEventDrop = (e: React.DragEvent<HTMLElement>, eventId: string) => {
+    e.preventDefault();
+
+    const sourceEventId = draggedEventId || e.dataTransfer.getData('text/plain');
+    if (sourceEventId && sourceEventId !== eventId) {
+      onReorderEvent(sourceEventId, eventId, dropTargetPosition);
+    }
+
+    clearDragState();
+  };
+
   return (
     <div
       id="horizontal-timeline-container"
@@ -481,6 +535,11 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
           // Stacked lane height offset from the baseline on each side
           const laneOffsetPx = 22 + event.lane * 42;
           const renderWidthPx = hasEndRange ? Math.max(28, Math.max(0, ((event.endYear as number) - event.year) * pixelsPerYear)) : 0;
+          const floatingLabelMaxWidthPx = Math.max(0, Math.min(260, renderWidthPx - 16));
+          const floatingLabelLeftPx = Math.min(
+            barLeftPx + renderWidthPx - floatingLabelMaxWidthPx - 8,
+            Math.max(barLeftPx + 8, viewportScrollLeft + 8)
+          );
           const labelShouldFloat = hasEndRange
             ? barLeftPx < viewportScrollLeft + 12 && barLeftPx + renderWidthPx > viewportScrollLeft
             : false;
@@ -498,11 +557,17 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
                   <div
                     className="absolute h-7 flex items-center pointer-events-none z-30"
                     style={{
-                      left: `${Math.max(barLeftPx + 8, viewportScrollLeft + 8)}px`,
+                      left: `${Math.max(barLeftPx + 8, floatingLabelLeftPx)}px`,
                       ...sideStyle,
                     }}
                   >
-                    <span className="max-w-[260px] truncate whitespace-nowrap px-2 py-0.5 text-xs font-medium text-white shadow-2xs" style={{ backgroundColor: eventColor }}>
+                    <span
+                      className="truncate whitespace-nowrap px-2 py-0.5 text-xs font-medium text-white shadow-2xs"
+                      style={{
+                        backgroundColor: eventColor,
+                        maxWidth: `${floatingLabelMaxWidthPx}px`,
+                      }}
+                    >
                       {event.title}
                     </span>
                   </div>
@@ -510,12 +575,19 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
 
                 <div
                   data-timeline-event="true"
+                  draggable
+                  onDragStart={(e) => handleEventDragStart(e, event.id)}
+                  onDragOver={(e) => handleEventDragOver(e, event.id)}
+                  onDrop={(e) => handleEventDrop(e, event.id)}
+                  onDragEnd={clearDragState}
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedEvent(event);
                   }}
-                  className="absolute h-7 rounded-none px-2 flex items-center cursor-pointer shadow-2xs transition-all hover:brightness-110 z-20 overflow-hidden"
+                  className={`absolute h-7 rounded-none px-2 flex items-center cursor-pointer shadow-2xs transition-all hover:brightness-110 z-20 overflow-hidden ${
+                      draggedEventId === event.id ? 'opacity-40 scale-[0.99]' : ''
+                    } ${dropTargetEventId === event.id ? 'ring-2 ring-[#2d3436] ring-offset-1' : ''}`}
                   style={{
                     left: `${startPct}%`,
                     width: `${renderWidthPx}px`,
@@ -539,12 +611,19 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
               <div
                 key={event.id}
                 data-timeline-event="true"
+                draggable
+                onDragStart={(e) => handleEventDragStart(e, event.id)}
+                onDragOver={(e) => handleEventDragOver(e, event.id)}
+                onDrop={(e) => handleEventDrop(e, event.id)}
+                onDragEnd={clearDragState}
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
                   setSelectedEvent(event);
                 }}
-                className={`absolute flex items-center cursor-pointer group z-20 -translate-x-1/2 pointer-events-auto ${isBelowSide ? 'flex-col' : 'flex-col'}`}
+                className={`absolute flex items-center cursor-pointer group z-20 -translate-x-1/2 pointer-events-auto ${isBelowSide ? 'flex-col' : 'flex-col'} ${
+                  draggedEventId === event.id ? 'opacity-40 scale-[0.99]' : ''
+                } ${dropTargetEventId === event.id ? 'ring-2 ring-[#2d3436] ring-offset-1' : ''}`}
                 style={{
                   left: `${startPct}%`,
                   [isBelowSide ? 'top' : 'bottom']: 'calc(50% + 20px)',

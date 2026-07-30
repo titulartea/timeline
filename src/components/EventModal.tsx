@@ -121,6 +121,7 @@ export const EventModal: React.FC<EventModalProps> = ({
       color: selectedColor,
       updatedAt: Date.now(),
       laneSide: eventToEdit?.laneSide ?? presetLaneSide ?? 'above',
+      displayOrder: eventToEdit?.displayOrder,
     };
 
     onSave(newEvent);

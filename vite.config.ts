@@ -5,7 +5,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    base: './timeline/',
+    base: '/timeline/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

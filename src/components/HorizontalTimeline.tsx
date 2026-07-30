@@ -8,11 +8,12 @@ interface HorizontalTimelineProps {
   settings: TimelineSettings;
   onEditEvent: (event: TimelineEvent) => void;
   onDeleteEvent: (eventId: string) => void;
-  onAddEventWithRange: (startYear: number, endYear?: number) => void;
+  onAddEventWithRange: (startYear: number, endYear?: number, laneSide?: 'above' | 'below') => void;
 }
 
 interface EventWithLane extends TimelineEvent {
   lane: number;
+  side: 'above' | 'below';
 }
 
 const FIXED_EVENT_COLOR = 'rgb(74, 111, 165)';
@@ -39,6 +40,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
   const [currentHoverX, setCurrentHoverX] = useState<number | null>(null);
   const [isNearBaseline, setIsNearBaseline] = useState<boolean>(false);
   const [viewportScrollLeft, setViewportScrollLeft] = useState<number>(0);
+  const [dragPlacementSide, setDragPlacementSide] = useState<'above' | 'below'>('above');
 
   const containerRef = useRef<HTMLDivElement>(null);
   const axisRef = useRef<HTMLDivElement>(null);
@@ -154,13 +156,16 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
   // Interval Stacking Layout Algorithm for overlapping range bars & pins
   const eventsWithLanes = useMemo(() => {
     const sorted = [...events].sort((a, b) => a.year - b.year);
-    const laneEnds: number[] = [];
+    const laneEndsAbove: number[] = [];
+    const laneEndsBelow: number[] = [];
     const pinYearWidth = Math.max(15, Math.ceil(120 / pixelsPerYear));
 
     return sorted.map((event) => {
       const hasEnd = event.endYear !== undefined && event.endYear !== null && event.endYear !== event.year;
       const start = event.year;
       const end = hasEnd ? (event.endYear as number) : event.year + pinYearWidth;
+      const side = event.laneSide === 'below' ? 'below' : 'above';
+      const laneEnds = side === 'below' ? laneEndsBelow : laneEndsAbove;
 
       let assignedLane = -1;
       for (let i = 0; i < laneEnds.length; i++) {
@@ -179,12 +184,17 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
       return {
         ...event,
         lane: assignedLane,
+        side,
       } as EventWithLane;
     });
   }, [events, pixelsPerYear]);
 
-  const maxLane = useMemo(() => {
-    return eventsWithLanes.reduce((max, e) => Math.max(max, e.lane), 0);
+  const maxAboveLane = useMemo(() => {
+    return eventsWithLanes.reduce((max, e) => (e.side === 'above' ? Math.max(max, e.lane) : max), 0);
+  }, [eventsWithLanes]);
+
+  const maxBelowLane = useMemo(() => {
+    return eventsWithLanes.reduce((max, e) => (e.side === 'below' ? Math.max(max, e.lane) : max), 0);
   }, [eventsWithLanes]);
 
   // Convert pixel position to year
@@ -219,9 +229,9 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
       const end = Math.max(dragStartYear, currentHoverYear);
 
       if (Math.abs(end - start) < 2) {
-        onAddEventWithRange(start);
+        onAddEventWithRange(start, undefined, dragPlacementSide);
       } else {
-        onAddEventWithRange(start, end);
+        onAddEventWithRange(start, end, dragPlacementSide);
       }
     }
 
@@ -230,6 +240,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
     setCurrentHoverX(null);
     setCurrentHoverYear(null);
     setIsNearBaseline(false);
+    setDragPlacementSide('above');
     activePointerTypeRef.current = null;
   };
 
@@ -253,6 +264,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
 
     const { currentX, yr, distFromBaseline } = interactionState;
     const baselineThreshold = getBaselineThreshold(e.pointerType);
+    const baselineY = axisRef.current.getBoundingClientRect().height * 0.5;
 
     if (distFromBaseline <= baselineThreshold) {
       setDragMode('create');
@@ -260,6 +272,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
       setCurrentHoverX(currentX);
       setCurrentHoverYear(yr);
       setIsNearBaseline(true);
+      setDragPlacementSide(e.clientY >= axisRef.current.getBoundingClientRect().top + baselineY ? 'below' : 'above');
     } else {
       setDragMode('pan');
       setPanStartX(e.clientX);
@@ -325,6 +338,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
       setCurrentHoverX(null);
       setCurrentHoverYear(null);
       setIsNearBaseline(false);
+      setDragPlacementSide('above');
     }
   };
 
@@ -348,9 +362,15 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
       endYr,
     };
   }, [dragMode, dragStartYear, currentHoverYear, minYear, yearRange]);
+  const dragRectSideStyle =
+    dragPlacementSide === 'below'
+      ? { top: 'calc(50% + 22px)' }
+      : { bottom: 'calc(50% + 14px)' };
 
   // Dynamic canvas height to fit all lanes cleanly across screen
-  const canvasMinHeight = Math.max(860, 240 + (maxLane + 1) * 58);
+  const canvasMinHeight = Math.max(2000, 260 + (maxAboveLane + maxBelowLane + 1) * 64);
+
+  const getEventColor = (event: TimelineEvent) => event.color || FIXED_EVENT_COLOR;
 
   return (
     <div
@@ -425,7 +445,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
             style={{
               left: `${dragRectPct.leftPct}%`,
               width: `${dragRectPct.widthPct}%`,
-              top: '50%',
+              ...dragRectSideStyle,
               backgroundColor: 'rgba(74, 111, 165, 0.4)',
             }}
           >
@@ -458,16 +478,20 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
           const startPct = Math.max(0, Math.min(100, ((event.year - minYear) / yearRange) * 100));
           const barLeftPx = (startPct / 100) * totalWidth;
 
-          // Stacked lane height offset ABOVE central baseline line (50%)
-          const bottomOffsetPx = 14 + event.lane * 38;
-          const labelShouldFloat = barLeftPx < viewportScrollLeft + 12;
+          // Stacked lane height offset from the baseline on each side
+          const laneOffsetPx = 22 + event.lane * 42;
+          const renderWidthPx = hasEndRange ? Math.max(28, Math.max(0, ((event.endYear as number) - event.year) * pixelsPerYear)) : 0;
+          const labelShouldFloat = hasEndRange
+            ? barLeftPx < viewportScrollLeft + 12 && barLeftPx + renderWidthPx > viewportScrollLeft
+            : false;
+          const isBelowSide = event.side === 'below';
+          const eventColor = getEventColor(event);
+          const sideStyle = isBelowSide
+            ? { top: `calc(50% + ${laneOffsetPx + 28}px)` }
+            : { bottom: `calc(50% + ${laneOffsetPx}px)` };
 
           if (hasEndRange) {
             // 1. Time Range Bar (범위 이벤트 - 직사각형 rounded-none, 고정색 rgb(74, 111, 165))
-            const durationYears = Math.max(0, (event.endYear as number) - event.year);
-            const durationPx = durationYears * pixelsPerYear;
-            const renderWidthPx = Math.max(28, durationPx);
-
             return (
               <React.Fragment key={event.id}>
                 {labelShouldFloat && (
@@ -475,10 +499,10 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
                     className="absolute h-7 flex items-center pointer-events-none z-30"
                     style={{
                       left: `${Math.max(barLeftPx + 8, viewportScrollLeft + 8)}px`,
-                      bottom: `calc(50% + ${bottomOffsetPx}px)`,
+                      ...sideStyle,
                     }}
                   >
-                    <span className="max-w-[260px] truncate whitespace-nowrap bg-[rgb(74,111,165)] px-2 py-0.5 text-xs font-medium text-white shadow-2xs">
+                    <span className="max-w-[260px] truncate whitespace-nowrap px-2 py-0.5 text-xs font-medium text-white shadow-2xs" style={{ backgroundColor: eventColor }}>
                       {event.title}
                     </span>
                   </div>
@@ -495,8 +519,8 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
                   style={{
                     left: `${startPct}%`,
                     width: `${renderWidthPx}px`,
-                    bottom: `calc(50% + ${bottomOffsetPx}px)`,
-                    backgroundColor: FIXED_EVENT_COLOR,
+                    ...sideStyle,
+                    backgroundColor: eventColor,
                   }}
                   title={`${event.title} (${formatYearRange(event.year, event.endYear)})`}
                 >
@@ -510,8 +534,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
             );
           } else {
             // 2. Point Event - Pin Marker (범위 없는 단일 사건 마일스톤)
-            const stemHeightPx = bottomOffsetPx;
-
+            const stemHeightPx = laneOffsetPx;
             return (
               <div
                 key={event.id}
@@ -521,33 +544,50 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
                   e.stopPropagation();
                   setSelectedEvent(event);
                 }}
-                className="absolute flex flex-col items-center cursor-pointer group z-20 -translate-x-1/2 pointer-events-auto"
+                className={`absolute flex items-center cursor-pointer group z-20 -translate-x-1/2 pointer-events-auto ${isBelowSide ? 'flex-col' : 'flex-col'}`}
                 style={{
                   left: `${startPct}%`,
-                  bottom: '50%',
+                  [isBelowSide ? 'top' : 'bottom']: 'calc(50% + 20px)',
                 }}
                 title={`${event.title} (${formatYearWithBcAd(event.year)})`}
               >
-                {/* Pin Marker Tag */}
-                <div
-                  className="flex items-center gap-1 px-2 py-0.5 rounded-none text-xs font-medium text-white shadow-2xs group-hover:scale-105 transition-transform whitespace-nowrap mb-0.5"
-                  style={{ backgroundColor: FIXED_EVENT_COLOR }}
-                >
-                  <MapPin className="w-3 h-3 fill-white text-transparent" />
-                  <span>{event.title}</span>
-                </div>
-
-                {/* Pin Stem */}
-                <div
-                  className="w-[1.5px] bg-gray-400 group-hover:bg-[#2d3436] transition-colors"
-                  style={{ height: `${stemHeightPx}px` }}
-                />
-
-                {/* Pin Base Dot on central baseline */}
-                <div
-                  className="w-2.5 h-2.5 rounded-full border-2 border-white shadow-2xs -mt-1 transition-transform group-hover:scale-125"
-                  style={{ backgroundColor: FIXED_EVENT_COLOR }}
-                />
+                {isBelowSide ? (
+                  <>
+                    <div
+                      className="w-2.5 h-2.5 rounded-full border-2 border-white shadow-2xs -mb-1 transition-transform group-hover:scale-125"
+                      style={{ backgroundColor: eventColor }}
+                    />
+                    <div
+                      className="w-[1.5px] bg-gray-400 group-hover:bg-[#2d3436] transition-colors"
+                      style={{ height: `${stemHeightPx}px` }}
+                    />
+                    <div
+                      className="flex items-center gap-1 px-2 py-0.5 rounded-none text-xs font-medium text-white shadow-2xs group-hover:scale-105 transition-transform whitespace-nowrap mt-0.5"
+                      style={{ backgroundColor: eventColor }}
+                    >
+                      <MapPin className="w-3 h-3 fill-white text-transparent" />
+                      <span>{event.title}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div
+                      className="flex items-center gap-1 px-2 py-0.5 rounded-none text-xs font-medium text-white shadow-2xs group-hover:scale-105 transition-transform whitespace-nowrap mb-0.5"
+                      style={{ backgroundColor: eventColor }}
+                    >
+                      <MapPin className="w-3 h-3 fill-white text-transparent" />
+                      <span>{event.title}</span>
+                    </div>
+                    <div
+                      className="w-[1.5px] bg-gray-400 group-hover:bg-[#2d3436] transition-colors"
+                      style={{ height: `${stemHeightPx}px` }}
+                    />
+                    <div
+                      className="w-2.5 h-2.5 rounded-full border-2 border-white shadow-2xs -mt-1 transition-transform group-hover:scale-125"
+                      style={{ backgroundColor: eventColor }}
+                    />
+                  </>
+                )}
               </div>
             );
           }
@@ -560,7 +600,10 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
           <div className="bg-white border border-[#e1e1e1] rounded-none w-full max-w-md p-6 shadow-lg text-[#2d3436] space-y-4">
             <div className="flex items-start justify-between gap-2 border-b border-[#e1e1e1] pb-3">
               <div>
-                <span className="text-xs font-mono font-bold text-white bg-[rgb(74,111,165)] px-2 py-0.5">
+                <span
+                  className="text-xs font-mono font-bold text-white px-2 py-0.5"
+                  style={{ backgroundColor: getEventColor(selectedEvent) }}
+                >
                   {formatYearRange(selectedEvent.year, selectedEvent.endYear)}
                 </span>
                 <h3 className="text-base font-bold text-[#2d3436] mt-2">
@@ -580,7 +623,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
                 {selectedEvent.description}
               </p>
             ) : (
-              <p className="text-xs text-gray-400 italic">추가 설명이 없습니다.</p>
+              <p className="text-xs text-gray-400 italic"></p>
             )}
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#e1e1e1]">

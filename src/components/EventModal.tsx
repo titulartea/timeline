@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { TimelineEvent } from '../types';
 
+const COLOR_OPTIONS = ['rgb(74, 111, 165)', 'rgb(190, 72, 72)', 'rgb(67, 131, 88)'];
+
 interface EventModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -8,6 +10,7 @@ interface EventModalProps {
   eventToEdit?: TimelineEvent | null;
   presetStartYear?: number | null;
   presetEndYear?: number | null;
+  presetLaneSide?: 'above' | 'below';
 }
 
 export const EventModal: React.FC<EventModalProps> = ({
@@ -17,6 +20,7 @@ export const EventModal: React.FC<EventModalProps> = ({
   eventToEdit,
   presetStartYear,
   presetEndYear,
+  presetLaneSide,
 }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -29,11 +33,13 @@ export const EventModal: React.FC<EventModalProps> = ({
   const [hasEndYear, setHasEndYear] = useState(false);
   const [isEndBce, setIsEndBce] = useState(true);
   const [endYearVal, setEndYearVal] = useState('');
+  const [selectedColor, setSelectedColor] = useState(COLOR_OPTIONS[0]);
 
   useEffect(() => {
     if (eventToEdit) {
       setTitle(eventToEdit.title);
       setDescription(eventToEdit.description || '');
+      setSelectedColor(eventToEdit.color || COLOR_OPTIONS[0]);
 
       // Start Year
       if (eventToEdit.year < 0) {
@@ -62,6 +68,7 @@ export const EventModal: React.FC<EventModalProps> = ({
       // New Event (or created by click & drag on timeline)
       setTitle('');
       setDescription('');
+      setSelectedColor(COLOR_OPTIONS[0]);
 
       const startYr = presetStartYear !== undefined && presetStartYear !== null ? presetStartYear : -500;
       if (startYr < 0) {
@@ -86,7 +93,7 @@ export const EventModal: React.FC<EventModalProps> = ({
         setEndYearVal('');
       }
     }
-  }, [eventToEdit, presetStartYear, presetEndYear, isOpen]);
+  }, [eventToEdit, presetStartYear, presetEndYear, presetLaneSide, isOpen]);
 
   if (!isOpen) return null;
 
@@ -111,8 +118,9 @@ export const EventModal: React.FC<EventModalProps> = ({
       description: description.trim(),
       year: computedStartYear,
       endYear: computedEndYear,
-      color: 'rgb(74, 111, 165)',
+      color: selectedColor,
       updatedAt: Date.now(),
+      laneSide: eventToEdit?.laneSide ?? presetLaneSide ?? 'above',
     };
 
     onSave(newEvent);
@@ -229,6 +237,22 @@ export const EventModal: React.FC<EventModalProps> = ({
           {/* 3. 메모 */}
           <div>
             <label className="block text-[#2d3436] font-bold mb-1.5 text-sm"></label>
+
+          <div>
+            <div className="flex items-center gap-2">
+              {COLOR_OPTIONS.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  onClick={() => setSelectedColor(color)}
+                  aria-label="색상 선택"
+                  title="색상 선택"
+                  className={`h-7 w-7 border transition-all ${selectedColor === color ? 'border-[#2d3436] scale-110' : 'border-[#e1e1e1] hover:border-[#2d3436]'}`}
+                  style={{ backgroundColor: color }}
+                />
+              ))}
+            </div>
+          </div>
             <textarea
               rows={3}
               value={description}

@@ -21,6 +21,7 @@ export default function App() {
   const [editingEvent, setEditingEvent] = useState<TimelineEvent | null>(null);
   const [presetStartYear, setPresetStartYear] = useState<number | null>(null);
   const [presetEndYear, setPresetEndYear] = useState<number | null>(null);
+  const [presetLaneSide, setPresetLaneSide] = useState<'above' | 'below'>('above');
 
   // Sorted events list for display
   const sortedEvents = useMemo(() => {
@@ -28,10 +29,11 @@ export default function App() {
   }, [roomState.events]);
 
   // Handlers
-  const handleAddEventWithRange = (startYear: number, endYear?: number) => {
+  const handleAddEventWithRange = (startYear: number, endYear?: number, laneSide: 'above' | 'below' = 'above') => {
     setEditingEvent(null);
     setPresetStartYear(startYear);
     setPresetEndYear(endYear || null);
+    setPresetLaneSide(laneSide);
     setIsAddEditModalOpen(true);
   };
 
@@ -39,6 +41,7 @@ export default function App() {
     setEditingEvent(event);
     setPresetStartYear(null);
     setPresetEndYear(null);
+    setPresetLaneSide('above');
     setIsAddEditModalOpen(true);
   };
 
@@ -71,6 +74,7 @@ export default function App() {
         eventToEdit={editingEvent}
         presetStartYear={presetStartYear}
         presetEndYear={presetEndYear}
+        presetLaneSide={presetLaneSide}
       />
     </div>
   );

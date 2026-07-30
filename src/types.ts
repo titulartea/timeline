@@ -6,6 +6,7 @@ export interface TimelineEvent {
   endYear?: number | null; // Optional end year for range events
   color?: string;
   updatedAt?: number;
+  laneSide?: 'above' | 'below';
 }
 
 export interface TimelineSettings {

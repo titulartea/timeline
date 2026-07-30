@@ -3,6 +3,20 @@ import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { RoomState, TimelineEvent, TimelineSettings } from '../types';
 
+const normalizeEvents = (events: TimelineEvent[]) => {
+  return [...events]
+    .sort((a, b) => {
+      const orderA = a.displayOrder ?? Number.MAX_SAFE_INTEGER;
+      const orderB = b.displayOrder ?? Number.MAX_SAFE_INTEGER;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.year - b.year;
+    })
+    .map((event, index) => ({
+      ...event,
+      displayOrder: event.displayOrder ?? index,
+    }));
+};
+
 export function useRealtimeRoom(roomId: string = 'default-timeline') {
   const [roomState, setRoomState] = useState<RoomState>({
     roomId,
@@ -25,7 +39,7 @@ export function useRealtimeRoom(roomId: string = 'default-timeline') {
           setRoomState({
             roomId,
             settings: data.settings || {},
-            events: Array.isArray(data.events) ? data.events : [],
+            events: Array.isArray(data.events) ? normalizeEvents(data.events) : [],
           });
         } else {
           // Initialize empty document in Firestore if it doesn't exist
@@ -60,7 +74,8 @@ export function useRealtimeRoom(roomId: string = 'default-timeline') {
   const addEvent = useCallback(
     (event: TimelineEvent) => {
       setRoomState((prev) => {
-        const updatedEvents = [...prev.events, event];
+        const nextOrder = prev.events.reduce((max, current) => Math.max(max, current.displayOrder ?? -1), -1) + 1;
+        const updatedEvents = [...prev.events, { ...event, displayOrder: event.displayOrder ?? nextOrder }];
         syncToFirestore(prev.settings, updatedEvents);
         return { ...prev, events: updatedEvents };
       });

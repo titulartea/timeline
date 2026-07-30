@@ -23,8 +23,8 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
   onDeleteEvent,
   onAddEventWithRange,
 }) => {
-  // Zoom level controls canvas width and tick detail (0.5 to 10 scale)
-  const [zoomLevel, setZoomLevel] = useState(3);
+  // Zoom level controls canvas width and tick detail (0.08 to 60 scale)
+  const [zoomLevel, setZoomLevel] = useState(0.2);
   const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(null);
 
   // Drag interaction modes: 'none' | 'create' (사건/범위 생성) | 'pan' (타임라인 이동)
@@ -42,6 +42,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const axisRef = useRef<HTMLDivElement>(null);
   const activePointerIdRef = useRef<number | null>(null);
+  const activePointerTypeRef = useRef<React.PointerEvent<HTMLDivElement>['pointerType'] | null>(null);
 
   // Auto-center vertical scroll position on mount
   useEffect(() => {
@@ -51,8 +52,8 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
     }
   }, []);
 
-  // Dynamic wide year bounds (-5000 BC ~ +3000 AD base)
-  const defaultMin = -5000;
+  // Dynamic wide year bounds (-4200 BC ~ +3000 AD base)
+  const defaultMin = -4200;
   const defaultMax = 3000;
 
   const eventYears = events.flatMap((e) => [
@@ -60,11 +61,11 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
     e.endYear !== undefined && e.endYear !== null ? e.endYear : e.year,
   ]);
 
-  const minYear = eventYears.length > 0 ? Math.min(defaultMin, Math.floor(Math.min(...eventYears) / 500) * 500 - 500) : defaultMin;
+  const minYear = defaultMin;
   const maxYear = eventYears.length > 0 ? Math.max(defaultMax, Math.ceil(Math.max(...eventYears) / 500) * 500 + 500) : defaultMax;
 
   const yearRange = Math.max(100, maxYear - minYear);
-  const totalWidth = Math.max(2500, Math.round(yearRange * zoomLevel * 0.8));
+  const totalWidth = Math.max(900, Math.round(yearRange * zoomLevel * 0.8));
   const pixelsPerYear = totalWidth / yearRange;
 
   // Focal Wheel Zoom handler: Zooms in/out keeping the cursor position fixed on screen
@@ -83,7 +84,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
 
         const zoomDelta = e.deltaY < 0 ? 0.5 : -0.5;
         setZoomLevel((prev) => {
-          const nextZoom = Math.max(0.5, Math.min(10, +(prev + zoomDelta).toFixed(1)));
+          const nextZoom = Math.max(0.08, Math.min(60, +(prev + zoomDelta).toFixed(2)));
           if (nextZoom === prev) return prev;
 
           // Focal scroll alignment after re-render
@@ -209,6 +210,8 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
     return { currentX, currentY, yr, distFromBaseline };
   };
 
+  const getBaselineThreshold = (pointerType: string) => (pointerType === 'touch' ? 56 : 35);
+
   const finalizeInteraction = () => {
     if (dragMode === 'create' && dragStartYear !== null && currentHoverYear !== null) {
       const start = Math.min(dragStartYear, currentHoverYear);
@@ -226,6 +229,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
     setCurrentHoverX(null);
     setCurrentHoverYear(null);
     setIsNearBaseline(false);
+    activePointerTypeRef.current = null;
   };
 
   // Pointer Handlers for Click & Drag Creation VS Panning Canvas
@@ -233,17 +237,23 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
     if (!axisRef.current || !containerRef.current) return;
     if (activePointerIdRef.current !== null && activePointerIdRef.current !== e.pointerId) return;
 
+    if ((e.target as HTMLElement | null)?.closest('[data-timeline-event="true"]')) {
+      return;
+    }
+
     e.preventDefault();
     e.stopPropagation();
     activePointerIdRef.current = e.pointerId;
+    activePointerTypeRef.current = e.pointerType;
     e.currentTarget.setPointerCapture(e.pointerId);
 
     const interactionState = getInteractionState(e.clientX, e.clientY);
     if (!interactionState) return;
 
     const { currentX, yr, distFromBaseline } = interactionState;
+    const baselineThreshold = getBaselineThreshold(e.pointerType);
 
-    if (distFromBaseline <= 35) {
+    if (distFromBaseline <= baselineThreshold) {
       setDragMode('create');
       setDragStartYear(yr);
       setCurrentHoverX(currentX);
@@ -269,7 +279,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
     if (!interactionState) return;
 
     const { currentX, yr, distFromBaseline } = interactionState;
-    setIsNearBaseline(distFromBaseline <= 35);
+    setIsNearBaseline(distFromBaseline <= getBaselineThreshold(activePointerTypeRef.current ?? e.pointerType));
     setCurrentHoverX(currentX);
     setCurrentHoverYear(yr);
 
@@ -335,7 +345,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
   }, [dragMode, dragStartYear, currentHoverYear, minYear, yearRange]);
 
   // Dynamic canvas height to fit all lanes cleanly across screen
-  const canvasMinHeight = Math.max(450, 240 + (maxLane + 1) * 40);
+  const canvasMinHeight = Math.max(860, 240 + (maxLane + 1) * 58);
 
   return (
     <div
@@ -442,7 +452,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
           const startPct = Math.max(0, Math.min(100, ((event.year - minYear) / yearRange) * 100));
 
           // Stacked lane height offset ABOVE central baseline line (50%)
-          const bottomOffsetPx = 12 + event.lane * 36;
+          const bottomOffsetPx = 14 + event.lane * 38;
 
           if (hasEndRange) {
             // 1. Time Range Bar (범위 이벤트 - 직사각형 rounded-none, 고정색 rgb(74, 111, 165))
@@ -453,6 +463,8 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
             return (
               <div
                 key={event.id}
+                data-timeline-event="true"
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
                   setSelectedEvent(event);
@@ -479,6 +491,8 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
             return (
               <div
                 key={event.id}
+                data-timeline-event="true"
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
                   setSelectedEvent(event);

@@ -345,7 +345,11 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
   }, [dragMode, dragStartYear, currentHoverYear, minYear, yearRange]);
 
   // Dynamic canvas height to fit all lanes cleanly across screen
+<<<<<<< HEAD
   const canvasMinHeight = Math.max(860, 240 + (maxLane + 1) * 58);
+=======
+  const canvasMinHeight = Math.max(900, 260 + (maxLane + 1) * 72);
+>>>>>>> a8e4b97cddc0b1b32db6d749fd8723138d55531d
 
   return (
     <div
@@ -452,7 +456,11 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
           const startPct = Math.max(0, Math.min(100, ((event.year - minYear) / yearRange) * 100));
 
           // Stacked lane height offset ABOVE central baseline line (50%)
+<<<<<<< HEAD
           const bottomOffsetPx = 14 + event.lane * 38;
+=======
+          const bottomOffsetPx = 18 + event.lane * 48;
+>>>>>>> a8e4b97cddc0b1b32db6d749fd8723138d55531d
 
           if (hasEndRange) {
             // 1. Time Range Bar (범위 이벤트 - 직사각형 rounded-none, 고정색 rgb(74, 111, 165))

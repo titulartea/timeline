@@ -38,6 +38,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
   const [currentHoverYear, setCurrentHoverYear] = useState<number | null>(null);
   const [currentHoverX, setCurrentHoverX] = useState<number | null>(null);
   const [isNearBaseline, setIsNearBaseline] = useState<boolean>(false);
+  const [viewportScrollLeft, setViewportScrollLeft] = useState<number>(0);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const axisRef = useRef<HTMLDivElement>(null);
@@ -327,6 +328,10 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
     }
   };
 
+  const handleContainerScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    setViewportScrollLeft(e.currentTarget.scrollLeft);
+  };
+
   // Live drag rectangle bounds
   const dragRectPct = useMemo(() => {
     if (dragMode !== 'create' || dragStartYear === null || currentHoverYear === null) return null;
@@ -345,16 +350,13 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
   }, [dragMode, dragStartYear, currentHoverYear, minYear, yearRange]);
 
   // Dynamic canvas height to fit all lanes cleanly across screen
-<<<<<<< HEAD
   const canvasMinHeight = Math.max(860, 240 + (maxLane + 1) * 58);
-=======
-  const canvasMinHeight = Math.max(900, 260 + (maxLane + 1) * 72);
->>>>>>> a8e4b97cddc0b1b32db6d749fd8723138d55531d
 
   return (
     <div
       id="horizontal-timeline-container"
       ref={containerRef}
+      onScroll={handleContainerScroll}
       className="w-full h-full min-h-screen bg-white overflow-x-auto overflow-y-auto relative select-none"
     >
       <div
@@ -454,13 +456,11 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
             event.endYear !== undefined && event.endYear !== null && event.endYear !== event.year;
 
           const startPct = Math.max(0, Math.min(100, ((event.year - minYear) / yearRange) * 100));
+          const barLeftPx = (startPct / 100) * totalWidth;
 
           // Stacked lane height offset ABOVE central baseline line (50%)
-<<<<<<< HEAD
           const bottomOffsetPx = 14 + event.lane * 38;
-=======
-          const bottomOffsetPx = 18 + event.lane * 48;
->>>>>>> a8e4b97cddc0b1b32db6d749fd8723138d55531d
+          const labelShouldFloat = barLeftPx < viewportScrollLeft + 12;
 
           if (hasEndRange) {
             // 1. Time Range Bar (범위 이벤트 - 직사각형 rounded-none, 고정색 rgb(74, 111, 165))
@@ -469,28 +469,44 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
             const renderWidthPx = Math.max(28, durationPx);
 
             return (
-              <div
-                key={event.id}
-                data-timeline-event="true"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedEvent(event);
-                }}
-                className="absolute h-7 rounded-none px-2 flex items-center cursor-pointer shadow-2xs transition-all hover:brightness-110 z-20 overflow-hidden"
-                style={{
-                  left: `${startPct}%`,
-                  width: `${renderWidthPx}px`,
-                  bottom: `calc(50% + ${bottomOffsetPx}px)`,
-                  backgroundColor: FIXED_EVENT_COLOR,
-                }}
-                title={`${event.title} (${formatYearRange(event.year, event.endYear)})`}
-              >
-                {/* Title ONLY inside bar */}
-                <span className="text-xs font-medium text-white truncate whitespace-nowrap">
-                  {event.title}
-                </span>
-              </div>
+              <React.Fragment key={event.id}>
+                {labelShouldFloat && (
+                  <div
+                    className="absolute h-7 flex items-center pointer-events-none z-30"
+                    style={{
+                      left: `${Math.max(barLeftPx + 8, viewportScrollLeft + 8)}px`,
+                      bottom: `calc(50% + ${bottomOffsetPx}px)`,
+                    }}
+                  >
+                    <span className="max-w-[260px] truncate whitespace-nowrap bg-[rgb(74,111,165)] px-2 py-0.5 text-xs font-medium text-white shadow-2xs">
+                      {event.title}
+                    </span>
+                  </div>
+                )}
+
+                <div
+                  data-timeline-event="true"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedEvent(event);
+                  }}
+                  className="absolute h-7 rounded-none px-2 flex items-center cursor-pointer shadow-2xs transition-all hover:brightness-110 z-20 overflow-hidden"
+                  style={{
+                    left: `${startPct}%`,
+                    width: `${renderWidthPx}px`,
+                    bottom: `calc(50% + ${bottomOffsetPx}px)`,
+                    backgroundColor: FIXED_EVENT_COLOR,
+                  }}
+                  title={`${event.title} (${formatYearRange(event.year, event.endYear)})`}
+                >
+                  {!labelShouldFloat && (
+                    <span className="text-xs font-medium text-white truncate whitespace-nowrap">
+                      {event.title}
+                    </span>
+                  )}
+                </div>
+              </React.Fragment>
             );
           } else {
             // 2. Point Event - Pin Marker (범위 없는 단일 사건 마일스톤)

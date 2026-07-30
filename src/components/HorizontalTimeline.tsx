@@ -41,6 +41,7 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const axisRef = useRef<HTMLDivElement>(null);
+  const activePointerIdRef = useRef<number | null>(null);
 
   // Auto-center vertical scroll position on mount
   useEffect(() => {
@@ -194,48 +195,84 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
     return yr;
   };
 
-  // Mouse Handlers for Click & Drag Creation VS Panning Canvas
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!axisRef.current || !containerRef.current) return;
+  const getInteractionState = (clientX: number, clientY: number) => {
+    if (!axisRef.current) return null;
+
     const rect = axisRef.current.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const clickY = e.clientY - rect.top;
-    const yr = getYearFromX(clickX);
+    const currentX = clientX - rect.left;
+    const currentY = clientY - rect.top;
+    const yr = getYearFromX(currentX);
 
     const baselineY = rect.height * 0.5;
-    const distFromBaseline = Math.abs(clickY - baselineY);
+    const distFromBaseline = Math.abs(currentY - baselineY);
 
-    // If mouse is near central baseline (±35px), initiate Range Event Creation mode
+    return { currentX, currentY, yr, distFromBaseline };
+  };
+
+  const finalizeInteraction = () => {
+    if (dragMode === 'create' && dragStartYear !== null && currentHoverYear !== null) {
+      const start = Math.min(dragStartYear, currentHoverYear);
+      const end = Math.max(dragStartYear, currentHoverYear);
+
+      if (Math.abs(end - start) < 2) {
+        onAddEventWithRange(start);
+      } else {
+        onAddEventWithRange(start, end);
+      }
+    }
+
+    setDragMode('none');
+    setDragStartYear(null);
+    setCurrentHoverX(null);
+    setCurrentHoverYear(null);
+    setIsNearBaseline(false);
+  };
+
+  // Pointer Handlers for Click & Drag Creation VS Panning Canvas
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!axisRef.current || !containerRef.current) return;
+    if (activePointerIdRef.current !== null && activePointerIdRef.current !== e.pointerId) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    activePointerIdRef.current = e.pointerId;
+    e.currentTarget.setPointerCapture(e.pointerId);
+
+    const interactionState = getInteractionState(e.clientX, e.clientY);
+    if (!interactionState) return;
+
+    const { currentX, yr, distFromBaseline } = interactionState;
+
     if (distFromBaseline <= 35) {
       setDragMode('create');
       setDragStartYear(yr);
-      setCurrentHoverX(clickX);
+      setCurrentHoverX(currentX);
       setCurrentHoverYear(yr);
+      setIsNearBaseline(true);
     } else {
-      // Otherwise, initiate 2D Panning Canvas mode (가로 및 세로 드래그 이동)
       setDragMode('pan');
       setPanStartX(e.clientX);
       setPanStartY(e.clientY);
       setPanScrollLeft(containerRef.current.scrollLeft);
       setPanScrollTop(containerRef.current.scrollTop);
+      setIsNearBaseline(false);
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
     if (!axisRef.current) return;
-    const rect = axisRef.current.getBoundingClientRect();
-    const currentX = e.clientX - rect.left;
-    const currentY = e.clientY - rect.top;
-    const yr = getYearFromX(currentX);
 
-    const baselineY = rect.height * 0.5;
-    const distFromBaseline = Math.abs(currentY - baselineY);
+    e.preventDefault();
+
+    const interactionState = getInteractionState(e.clientX, e.clientY);
+    if (!interactionState) return;
+
+    const { currentX, yr, distFromBaseline } = interactionState;
     setIsNearBaseline(distFromBaseline <= 35);
-
     setCurrentHoverX(currentX);
     setCurrentHoverYear(yr);
 
-    // If in Panning Mode, update container scroll position horizontally & vertically
     if (dragMode === 'pan' && containerRef.current) {
       const deltaX = e.clientX - panStartX;
       const deltaY = e.clientY - panStartY;
@@ -244,27 +281,33 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
     }
   };
 
-  const handleMouseUp = () => {
-    if (dragMode === 'create' && dragStartYear !== null && currentHoverYear !== null) {
-      const start = Math.min(dragStartYear, currentHoverYear);
-      const end = Math.max(dragStartYear, currentHoverYear);
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
 
-      if (Math.abs(end - start) < 2) {
-        // Point event creation
-        onAddEventWithRange(start);
-      } else {
-        // Range event creation
-        onAddEventWithRange(start, end);
-      }
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
     }
 
-    setDragMode('none');
-    setDragStartYear(null);
+    activePointerIdRef.current = null;
+    finalizeInteraction();
   };
 
-  const handleMouseLeave = () => {
-    if (dragMode === 'create' && dragStartYear !== null && currentHoverYear !== null) {
-      handleMouseUp();
+  const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
+
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+
+    activePointerIdRef.current = null;
+    finalizeInteraction();
+  };
+
+  const handlePointerLeave = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
+
+    if (dragMode === 'create') {
+      finalizeInteraction();
     } else {
       setDragMode('none');
       setDragStartYear(null);
@@ -302,18 +345,19 @@ export const HorizontalTimeline: React.FC<HorizontalTimelineProps> = ({
     >
       <div
         ref={axisRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseLeave}
-        className={`relative w-full h-full min-h-screen ${
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
+        onPointerLeave={handlePointerLeave}
+        className={`relative w-full h-full min-h-screen touch-none ${
           dragMode === 'pan'
             ? 'cursor-grabbing'
             : isNearBaseline
             ? 'cursor-crosshair'
             : 'cursor-grab'
         }`}
-        style={{ width: `${totalWidth}px`, minHeight: `${canvasMinHeight}px` }}
+        style={{ width: `${totalWidth}px`, minHeight: `${canvasMinHeight}px`, touchAction: 'none' }}
       >
         {/* Main Central Horizontal Baseline Axis Line (Screen Vertical Center: 50%) */}
         <div

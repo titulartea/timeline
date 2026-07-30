@@ -127,7 +127,7 @@ export const EventModal: React.FC<EventModalProps> = ({
           {/* 1. 사건 입력 (제목) */}
           <div>
             <label className="block text-[#2d3436] font-bold mb-1.5 text-sm">
-              사건 입력 (제목) <span className="text-red-500">*</span>
+              사건 <span className="text-red-500"></span>
             </label>
             <input
               id="event-modal-title-input"
@@ -175,7 +175,7 @@ export const EventModal: React.FC<EventModalProps> = ({
                   type="number"
                   value={yearVal}
                   onChange={(e) => setYearVal(e.target.value)}
-                  className="flex-1 bg-white border border-[#e1e1e1] rounded-none px-3 py-1.5 text-[#2d3436] font-mono text-sm focus:border-[#2d3436] outline-none"
+                  className="flex-1 bg-none border-none rounded-none px-3 py-1.5 text-[#2d3436] font-mono text-sm focus:border-[#2d3436] outline-none"
                 />
               </div>
             </div>
@@ -189,7 +189,7 @@ export const EventModal: React.FC<EventModalProps> = ({
                   onChange={(e) => setHasEndYear(e.target.checked)}
                   className="w-3.5 h-3.5 border-[#e1e1e1] text-[#2d3436] focus:ring-0"
                 />
-                <span className="text-[11px] font-semibold text-gray-700">끝 년 (기간 설정)</span>
+                <span className="text-[11px] font-semibold text-gray-700">끝</span>
               </label>
 
               {hasEndYear && (
@@ -219,7 +219,7 @@ export const EventModal: React.FC<EventModalProps> = ({
                     type="number"
                     value={endYearVal}
                     onChange={(e) => setEndYearVal(e.target.value)}
-                    className="flex-1 bg-white border border-[#e1e1e1] rounded-none px-3 py-1.5 text-[#2d3436] font-mono text-sm focus:border-[#2d3436] outline-none"
+                    className="flex-1 bg-none border-none rounded-none px-3 py-1.5 text-[#2d3436] font-mono text-sm focus:border-[#2d3436] outline-none"
                   />
                 </div>
               )}
@@ -228,7 +228,7 @@ export const EventModal: React.FC<EventModalProps> = ({
 
           {/* 3. 메모 */}
           <div>
-            <label className="block text-[#2d3436] font-bold mb-1.5 text-sm">메모</label>
+            <label className="block text-[#2d3436] font-bold mb-1.5 text-sm"></label>
             <textarea
               rows={3}
               value={description}

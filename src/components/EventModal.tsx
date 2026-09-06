@@ -117,12 +117,15 @@ export const EventModal: React.FC<EventModalProps> = ({
       title: title.trim(),
       description: description.trim(),
       year: computedStartYear,
-      endYear: computedEndYear,
       color: selectedColor,
       updatedAt: Date.now(),
       laneSide: eventToEdit?.laneSide ?? presetLaneSide ?? 'above',
       displayOrder: eventToEdit?.displayOrder,
     };
+
+    if (computedEndYear !== undefined) {
+      newEvent.endYear = computedEndYear;
+    }
 
     onSave(newEvent);
     onClose();

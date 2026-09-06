@@ -1,7 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { TimelineEvent } from '../types';
 
-const COLOR_OPTIONS = ['rgb(74, 111, 165)', 'rgb(190, 72, 72)', 'rgb(67, 131, 88)'];
+const COLOR_OPTIONS = [
+  'rgb(74, 111, 165)',
+  'rgb(190, 72, 72)',
+  'rgb(67, 131, 88)',
+  'rgb(161, 115, 20)',
+  'rgb(35, 128, 125)',
+  'rgb(126, 79, 153)',
+];
 
 interface EventModalProps {
   isOpen: boolean;
